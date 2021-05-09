@@ -20,9 +20,9 @@
  * IN THE SOFTWARE.
  */
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <limits.h>
 #include <string.h>
 
 #include "microtar.h"
@@ -39,6 +39,54 @@ typedef struct {
   char linkname[100];
   char _padding[255];
 } mtar_raw_header_t;
+
+
+static int parse_octal(const char* str, size_t len, unsigned* ret) {
+  unsigned n = 0;
+  while(len-- > 0 && *str != 0) {
+    if(*str < '0' || *str > '9')
+      return MTAR_EOVERFLOW;
+
+    if(n > UINT_MAX/8)
+      return MTAR_EOVERFLOW;
+    else
+      n *= 8;
+
+    char r = *str++ - '0';
+    if(n > UINT_MAX - r)
+      return MTAR_EOVERFLOW;
+    else
+      n += r;
+  }
+
+  *ret = n;
+  return MTAR_ESUCCESS;
+}
+
+
+static int print_octal(char* str, size_t len, unsigned value) {
+  /* move backwards over the output string */
+  char* ptr = str + len - 1;
+  *ptr = 0;
+
+  /* output the significant digits */
+  while(value > 0) {
+    if(ptr == str)
+      return MTAR_EOVERFLOW;
+
+    --ptr;
+    *ptr = '0' + (value % 8);
+    value /= 8;
+  }
+
+  /* pad the remainder of the field with zeros */
+  while(ptr != str) {
+    --ptr;
+    *ptr = '0';
+  }
+
+  return MTAR_ESUCCESS;
+}
 
 
 static unsigned round_up(unsigned n, unsigned incr) {
@@ -89,6 +137,7 @@ static int write_null_bytes(mtar_t *tar, int n) {
 
 static int raw_to_header(mtar_header_t *h, const mtar_raw_header_t *rh) {
   unsigned chksum1, chksum2;
+  int rc;
 
   /* If the checksum starts with a null byte we assume the record is NULL */
   if (*rh->checksum == '\0') {
@@ -97,19 +146,31 @@ static int raw_to_header(mtar_header_t *h, const mtar_raw_header_t *rh) {
 
   /* Build and compare checksum */
   chksum1 = checksum(rh);
-  sscanf(rh->checksum, "%o", &chksum2);
+  if((rc = parse_octal(rh->checksum, sizeof(rh->checksum), &chksum2)))
+      return rc;
   if (chksum1 != chksum2) {
     return MTAR_EBADCHKSUM;
   }
 
   /* Load raw header into header */
-  sscanf(rh->mode, "%o", &h->mode);
-  sscanf(rh->owner, "%o", &h->owner);
-  sscanf(rh->size, "%o", &h->size);
-  sscanf(rh->mtime, "%o", &h->mtime);
+  if((rc = parse_octal(rh->mode, sizeof(rh->mode), &h->mode)))
+    return rc;
+  if((rc = parse_octal(rh->owner, sizeof(rh->owner), &h->owner)))
+    return rc;
+  if((rc = parse_octal(rh->group, sizeof(rh->group), &h->group)))
+    return rc;
+  if((rc = parse_octal(rh->size, sizeof(rh->size), &h->size)))
+    return rc;
+  if((rc = parse_octal(rh->mtime, sizeof(rh->mtime), &h->mtime)))
+    return rc;
+
   h->type = rh->type;
-  strcpy(h->name, rh->name);
-  strcpy(h->linkname, rh->linkname);
+
+  memcpy(h->name, rh->name, sizeof(rh->name));
+  h->name[sizeof(h->name) - 1] = 0;
+
+  memcpy(h->linkname, rh->linkname, sizeof(rh->linkname));
+  h->linkname[sizeof(h->linkname) - 1] = 0;
 
   return MTAR_ESUCCESS;
 }
@@ -117,20 +178,28 @@ static int raw_to_header(mtar_header_t *h, const mtar_raw_header_t *rh) {
 
 static int header_to_raw(mtar_raw_header_t *rh, const mtar_header_t *h) {
   unsigned chksum;
+  int rc;
 
   /* Load header into raw header */
   memset(rh, 0, sizeof(*rh));
-  sprintf(rh->mode, "%o", h->mode);
-  sprintf(rh->owner, "%o", h->owner);
-  sprintf(rh->size, "%o", h->size);
-  sprintf(rh->mtime, "%o", h->mtime);
+  if((rc = print_octal(rh->mode, sizeof(rh->mode), h->mode)))
+    return rc;
+  if((rc = print_octal(rh->owner, sizeof(rh->owner), h->owner)))
+    return rc;
+  if((rc = print_octal(rh->group, sizeof(rh->group), h->group)))
+    return rc;
+  if((rc = print_octal(rh->size, sizeof(rh->size), h->size)))
+    return rc;
+  if((rc = print_octal(rh->mtime, sizeof(rh->mtime), h->mtime)))
+    return rc;
   rh->type = h->type ? h->type : MTAR_TREG;
-  strcpy(rh->name, h->name);
-  strcpy(rh->linkname, h->linkname);
+  strncpy(rh->name, h->name, sizeof(rh->name));
+  strncpy(rh->linkname, h->linkname, sizeof(rh->linkname));
 
   /* Calculate and write checksum */
   chksum = checksum(rh);
-  sprintf(rh->checksum, "%06o", chksum);
+  if((rc = print_octal(rh->checksum, 7, chksum)))
+     return rc;
   rh->checksum[7] = ' ';
 
   return MTAR_ESUCCESS;
@@ -148,63 +217,9 @@ const char* mtar_strerror(int err) {
     case MTAR_EBADCHKSUM   : return "bad checksum";
     case MTAR_ENULLRECORD  : return "null record";
     case MTAR_ENOTFOUND    : return "file not found";
+    case MTAR_EOVERFLOW    : return "overflow";
   }
   return "unknown error";
-}
-
-
-static int file_write(mtar_t *tar, const void *data, unsigned size) {
-  unsigned res = fwrite(data, 1, size, tar->stream);
-  return (res == size) ? MTAR_ESUCCESS : MTAR_EWRITEFAIL;
-}
-
-static int file_read(mtar_t *tar, void *data, unsigned size) {
-  unsigned res = fread(data, 1, size, tar->stream);
-  return (res == size) ? MTAR_ESUCCESS : MTAR_EREADFAIL;
-}
-
-static int file_seek(mtar_t *tar, unsigned offset) {
-  int res = fseek(tar->stream, offset, SEEK_SET);
-  return (res == 0) ? MTAR_ESUCCESS : MTAR_ESEEKFAIL;
-}
-
-static int file_close(mtar_t *tar) {
-  fclose(tar->stream);
-  return MTAR_ESUCCESS;
-}
-
-
-int mtar_open(mtar_t *tar, const char *filename, const char *mode) {
-  int err;
-  mtar_header_t h;
-
-  /* Init tar struct and functions */
-  memset(tar, 0, sizeof(*tar));
-  tar->write = file_write;
-  tar->read = file_read;
-  tar->seek = file_seek;
-  tar->close = file_close;
-
-  /* Assure mode is always binary */
-  if ( strchr(mode, 'r') ) mode = "rb";
-  if ( strchr(mode, 'w') ) mode = "wb";
-  if ( strchr(mode, 'a') ) mode = "ab";
-  /* Open file */
-  tar->stream = fopen(filename, mode);
-  if (!tar->stream) {
-    return MTAR_EOPENFAIL;
-  }
-  /* Read first header to check it is valid if mode is `r` */
-  if (*mode == 'r') {
-    err = mtar_read_header(tar, &h);
-    if (err != MTAR_ESUCCESS) {
-      mtar_close(tar);
-      return err;
-    }
-  }
-
-  /* Return ok */
-  return MTAR_ESUCCESS;
 }
 
 
@@ -257,7 +272,10 @@ int mtar_find(mtar_t *tar, const char *name, mtar_header_t *h) {
       }
       return MTAR_ESUCCESS;
     }
-    mtar_next(tar);
+    err = mtar_next(tar);
+    if (err) {
+      return err;
+    }
   }
   /* Return error */
   if (err == MTAR_ENULLRECORD) {
@@ -305,6 +323,9 @@ int mtar_read_data(mtar_t *tar, void *ptr, unsigned size) {
     }
     tar->remaining_data = h.size;
   }
+  /* Ensure caller does not read too much */
+  if(size > tar->remaining_data)
+    return MTAR_EOVERFLOW;
   /* Read data */
   err = tread(tar, ptr, size);
   if (err) {
@@ -333,7 +354,10 @@ int mtar_write_file_header(mtar_t *tar, const char *name, unsigned size) {
   mtar_header_t h;
   /* Build header */
   memset(&h, 0, sizeof(h));
-  strcpy(h.name, name);
+  /* Ensure name fits within header */
+  if(strlen(name) > sizeof(h.name))
+    return MTAR_EOVERFLOW;
+  strncpy(h.name, name, sizeof(h.name));
   h.size = size;
   h.type = MTAR_TREG;
   h.mode = 0664;
@@ -346,7 +370,10 @@ int mtar_write_dir_header(mtar_t *tar, const char *name) {
   mtar_header_t h;
   /* Build header */
   memset(&h, 0, sizeof(h));
-  strcpy(h.name, name);
+  /* Ensure name fits within header */
+  if(strlen(name) > sizeof(h.name))
+    return MTAR_EOVERFLOW;
+  strncpy(h.name, name, sizeof(h.name));
   h.type = MTAR_TDIR;
   h.mode = 0775;
   /* Write header */
@@ -356,6 +383,11 @@ int mtar_write_dir_header(mtar_t *tar, const char *name) {
 
 int mtar_write_data(mtar_t *tar, const void *data, unsigned size) {
   int err;
+
+  /* Ensure we are writing the correct amount of data */
+  if(size > tar->remaining_data)
+    return MTAR_EOVERFLOW;
+
   /* Write data */
   err = twrite(tar, data, size);
   if (err) {

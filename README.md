@@ -2,6 +2,27 @@
 A lightweight tar library written in ANSI C
 
 
+## Modifications from upstream
+
+[Upstream](https://github.com/rxi/microtar) has numerous bugs and gotchas,
+which I fixed in order to improve the overall robustness of the library.
+
+A summary of my changes, in no particular order:
+
+- Fix possible sscanf beyond the bounds of the input buffer
+- Fix possible buffer overruns due to strcpy on untrusted input
+- Fix incorrect octal formatting by sprintf and possible output overrruns
+- Catch read/writes which are too big and handle them gracefully
+- Handle over-long names in `mtar_write_file_header` / `mtar_write_dir_header`
+- Ensure strings in `mtar_header_t` are always null-terminated
+- Save and load group information so we don't lose information
+- Move `mtar_open()` to `microtar-stdio.c` so `microtar.c` can be used in
+  a freestanding environment
+
+An up-to-date copy of this modified version can be found
+[here](https://github.com/amachronic/microtar).
+
+
 ## Basic Usage
 The library consists of `microtar.c` and `microtar.h`. These two files can be
 dropped into an existing project and compiled along with it.

@@ -27,7 +27,8 @@ enum {
   MTAR_ESEEKFAIL    = -5,
   MTAR_EBADCHKSUM   = -6,
   MTAR_ENULLRECORD  = -7,
-  MTAR_ENOTFOUND    = -8
+  MTAR_ENOTFOUND    = -8,
+  MTAR_EOVERFLOW    = -9,
 };
 
 enum {
@@ -43,11 +44,12 @@ enum {
 typedef struct {
   unsigned mode;
   unsigned owner;
+  unsigned group;
   unsigned size;
   unsigned mtime;
   unsigned type;
-  char name[100];
-  char linkname[100];
+  char name[101]; /* +1 byte in order to ensure null termination */
+  char linkname[101];
 } mtar_header_t;
 
 
