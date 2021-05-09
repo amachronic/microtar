@@ -53,6 +53,20 @@ typedef struct {
 } mtar_header_t;
 
 
+typedef struct {
+  char name[100];
+  char mode[8];
+  char owner[8];
+  char group[8];
+  char size[12];
+  char mtime[12];
+  char checksum[8];
+  char type;
+  char linkname[100];
+  char _padding[255];
+} mtar_raw_header_t;
+
+
 typedef struct mtar_t mtar_t;
 
 struct mtar_t {
@@ -64,6 +78,8 @@ struct mtar_t {
   unsigned pos;
   unsigned remaining_data;
   unsigned last_header;
+  mtar_header_t header;
+  mtar_raw_header_t raw_header;
 };
 
 

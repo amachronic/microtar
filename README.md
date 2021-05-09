@@ -18,6 +18,8 @@ A summary of my changes, in no particular order:
 - Save and load group information so we don't lose information
 - Move `mtar_open()` to `microtar-stdio.c` so `microtar.c` can be used in
   a freestanding environment
+- Allow control of stack usage by moving temporary variables into `mtar_t`,
+  so the caller can decide whether to use the stack or heap
 
 An up-to-date copy of this modified version can be found
 [here](https://github.com/amachronic/microtar).

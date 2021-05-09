@@ -27,19 +27,6 @@
 
 #include "microtar.h"
 
-typedef struct {
-  char name[100];
-  char mode[8];
-  char owner[8];
-  char group[8];
-  char size[12];
-  char mtime[12];
-  char checksum[8];
-  char type;
-  char linkname[100];
-  char _padding[255];
-} mtar_raw_header_t;
-
 
 static int parse_octal(const char* str, size_t len, unsigned* ret) {
   unsigned n = 0;
@@ -244,31 +231,29 @@ int mtar_rewind(mtar_t *tar) {
 
 int mtar_next(mtar_t *tar) {
   int err, n;
-  mtar_header_t h;
   /* Load header */
-  err = mtar_read_header(tar, &h);
+  err = mtar_read_header(tar, &tar->header);
   if (err) {
     return err;
   }
   /* Seek to next record */
-  n = round_up(h.size, 512) + sizeof(mtar_raw_header_t);
+  n = round_up(tar->header.size, 512) + sizeof(mtar_raw_header_t);
   return mtar_seek(tar, tar->pos + n);
 }
 
 
 int mtar_find(mtar_t *tar, const char *name, mtar_header_t *h) {
   int err;
-  mtar_header_t header;
   /* Start at beginning */
   err = mtar_rewind(tar);
   if (err) {
     return err;
   }
   /* Iterate all files until we hit an error or find the file */
-  while ( (err = mtar_read_header(tar, &header)) == MTAR_ESUCCESS ) {
-    if ( !strcmp(header.name, name) ) {
+  while ( (err = mtar_read_header(tar, &tar->header)) == MTAR_ESUCCESS ) {
+    if ( !strcmp(tar->header.name, name) ) {
       if (h) {
-        *h = header;
+        *h = tar->header;
       }
       return MTAR_ESUCCESS;
     }
@@ -287,11 +272,10 @@ int mtar_find(mtar_t *tar, const char *name, mtar_header_t *h) {
 
 int mtar_read_header(mtar_t *tar, mtar_header_t *h) {
   int err;
-  mtar_raw_header_t rh;
   /* Save header position */
   tar->last_header = tar->pos;
   /* Read raw header */
-  err = tread(tar, &rh, sizeof(rh));
+  err = tread(tar, &tar->raw_header, sizeof(tar->raw_header));
   if (err) {
     return err;
   }
@@ -301,7 +285,7 @@ int mtar_read_header(mtar_t *tar, mtar_header_t *h) {
     return err;
   }
   /* Load raw header into header struct and return */
-  return raw_to_header(h, &rh);
+  return raw_to_header(h, &tar->raw_header);
 }
 
 
@@ -310,9 +294,8 @@ int mtar_read_data(mtar_t *tar, void *ptr, unsigned size) {
   /* If we have no remaining data then this is the first read, we get the size,
    * set the remaining data and seek to the beginning of the data */
   if (tar->remaining_data == 0) {
-    mtar_header_t h;
     /* Read header */
-    err = mtar_read_header(tar, &h);
+    err = mtar_read_header(tar, &tar->header);
     if (err) {
       return err;
     }
@@ -321,7 +304,7 @@ int mtar_read_data(mtar_t *tar, void *ptr, unsigned size) {
     if (err) {
       return err;
     }
-    tar->remaining_data = h.size;
+    tar->remaining_data = tar->header.size;
   }
   /* Ensure caller does not read too much */
   if(size > tar->remaining_data)
@@ -342,42 +325,39 @@ int mtar_read_data(mtar_t *tar, void *ptr, unsigned size) {
 
 
 int mtar_write_header(mtar_t *tar, const mtar_header_t *h) {
-  mtar_raw_header_t rh;
   /* Build raw header and write */
-  header_to_raw(&rh, h);
+  header_to_raw(&tar->raw_header, h);
   tar->remaining_data = h->size;
-  return twrite(tar, &rh, sizeof(rh));
+  return twrite(tar, &tar->raw_header, sizeof(tar->raw_header));
 }
 
 
 int mtar_write_file_header(mtar_t *tar, const char *name, unsigned size) {
-  mtar_header_t h;
   /* Build header */
-  memset(&h, 0, sizeof(h));
+  memset(&tar->header, 0, sizeof(tar->header));
   /* Ensure name fits within header */
-  if(strlen(name) > sizeof(h.name))
+  if(strlen(name) > sizeof(tar->header.name))
     return MTAR_EOVERFLOW;
-  strncpy(h.name, name, sizeof(h.name));
-  h.size = size;
-  h.type = MTAR_TREG;
-  h.mode = 0664;
+  strncpy(tar->header.name, name, sizeof(tar->header.name));
+  tar->header.size = size;
+  tar->header.type = MTAR_TREG;
+  tar->header.mode = 0664;
   /* Write header */
-  return mtar_write_header(tar, &h);
+  return mtar_write_header(tar, &tar->header);
 }
 
 
 int mtar_write_dir_header(mtar_t *tar, const char *name) {
-  mtar_header_t h;
   /* Build header */
-  memset(&h, 0, sizeof(h));
+  memset(&tar->header, 0, sizeof(tar->header));
   /* Ensure name fits within header */
-  if(strlen(name) > sizeof(h.name))
+  if(strlen(name) > sizeof(tar->header.name))
     return MTAR_EOVERFLOW;
-  strncpy(h.name, name, sizeof(h.name));
-  h.type = MTAR_TDIR;
-  h.mode = 0775;
+  strncpy(tar->header.name, name, sizeof(tar->header.name));
+  tar->header.type = MTAR_TDIR;
+  tar->header.mode = 0775;
   /* Write header */
-  return mtar_write_header(tar, &h);
+  return mtar_write_header(tar, &tar->header);
 }
 
 
