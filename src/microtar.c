@@ -77,9 +77,9 @@ static int print_octal(char* str, size_t len, unsigned value)
     return MTAR_ESUCCESS;
 }
 
-static unsigned round_up(unsigned n, unsigned incr)
+static unsigned round_up_512(unsigned n)
 {
-    return n + (incr - n % incr) % incr;
+    return (n + 511u) & ~511u;
 }
 
 static int tread(mtar_t* tar, void* data, unsigned size)
@@ -273,7 +273,7 @@ int mtar_next(mtar_t* tar)
         return err;
 
     /* Seek to next record */
-    n = round_up(tar->header.size, 512) + HEADER_LEN;
+    n = round_up_512(tar->header.size) + HEADER_LEN;
     return mtar_seek(tar, tar->pos + n);
 }
 
@@ -427,7 +427,7 @@ int mtar_write_data(mtar_t* tar, const void* data, unsigned size)
 
     /* Write padding if we've written all the data for this file */
     if(tar->remaining_data == 0)
-        return write_null_bytes(tar, round_up(tar->pos, 512) - tar->pos);
+        return write_null_bytes(tar, round_up_512(tar->pos) - tar->pos);
 
     return MTAR_ESUCCESS;
 }
