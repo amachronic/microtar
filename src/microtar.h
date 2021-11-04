@@ -42,6 +42,7 @@ enum {
     MTAR_ENULLRECORD  = -7,
     MTAR_ENOTFOUND    = -8,
     MTAR_EOVERFLOW    = -9,
+    MTAR_EAPI         = -10,
 };
 
 enum {
@@ -77,14 +78,14 @@ struct mtar_ops {
 };
 
 struct mtar {
-    const mtar_ops_t* ops;
-    void* stream;
-
-    unsigned pos;
-    unsigned remaining_data;
-    unsigned last_header;
-    mtar_header_t header;
-    char buffer[512];
+    char buffer[512];       /* IO buffer, put first to allow library users to
+                             * control its alignment */
+    int state;              /* Used to simplify the API and verify API usage */
+    unsigned pos;           /* Current position in file */
+    unsigned header_pos;    /* Position of the current header */
+    mtar_header_t header;   /* Most recently parsed header */
+    const mtar_ops_t* ops;  /* Stream operations */
+    void* stream;           /* Stream handle */
 };
 
 const char* mtar_strerror(int err);
@@ -95,18 +96,12 @@ int mtar_init(mtar_t* tar, const mtar_ops_t* ops, void* stream);
 int mtar_close(mtar_t* tar);
 int mtar_is_open(mtar_t* tar);
 
-int mtar_seek(mtar_t* tar, unsigned pos);
+const mtar_header_t* mtar_get_header(const mtar_t* tar);
+
 int mtar_rewind(mtar_t* tar);
 int mtar_next(mtar_t* tar);
-int mtar_find(mtar_t* tar, const char* name, mtar_header_t* h);
-int mtar_read_header(mtar_t* tar, mtar_header_t* h);
+int mtar_find(mtar_t* tar, const char* name);
 int mtar_read_data(mtar_t* tar, void* ptr, unsigned size);
-
-int mtar_write_header(mtar_t* tar, const mtar_header_t* h);
-int mtar_write_file_header(mtar_t* tar, const char* name, unsigned size);
-int mtar_write_dir_header(mtar_t* tar, const char* name);
-int mtar_write_data(mtar_t* tar, const void* data, unsigned size);
-int mtar_finalize(mtar_t* tar);
 
 #ifdef __cplusplus
 }
