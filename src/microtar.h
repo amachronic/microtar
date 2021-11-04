@@ -55,7 +55,6 @@ enum {
 };
 
 typedef struct mtar_header mtar_header_t;
-typedef struct mtar_raw_header mtar_raw_header_t;
 typedef struct mtar mtar_t;
 typedef struct mtar_ops mtar_ops_t;
 
@@ -68,19 +67,6 @@ struct mtar_header {
     unsigned type;
     char name[101]; /* +1 byte in order to ensure null termination */
     char linkname[101];
-};
-
-struct mtar_raw_header {
-    char name[100];
-    char mode[8];
-    char owner[8];
-    char group[8];
-    char size[12];
-    char mtime[12];
-    char checksum[8];
-    char type;
-    char linkname[100];
-    char _padding[255];
 };
 
 struct mtar_ops {
@@ -98,7 +84,7 @@ struct mtar {
     unsigned remaining_data;
     unsigned last_header;
     mtar_header_t header;
-    mtar_raw_header_t raw_header;
+    char buffer[512];
 };
 
 const char* mtar_strerror(int err);

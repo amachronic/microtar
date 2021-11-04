@@ -82,28 +82,12 @@ static unsigned round_up(unsigned n, unsigned incr)
     return n + (incr - n % incr) % incr;
 }
 
-static unsigned checksum(const mtar_raw_header_t* rh)
-{
-    unsigned i;
-    unsigned char* p = (unsigned char*) rh;
-    unsigned res = 256;
-
-    for(i = 0; i < offsetof(mtar_raw_header_t, checksum); i++)
-        res += p[i];
-
-    for(i = offsetof(mtar_raw_header_t, type); i < sizeof(*rh); i++)
-        res += p[i];
-
-    return res;
-}
-
 static int tread(mtar_t* tar, void* data, unsigned size)
 {
     int err = tar->ops->read(tar->stream, data, size);
     tar->pos += size;
     return err;
 }
-
 
 static int twrite(mtar_t* tar, const void* data, unsigned size)
 {
@@ -119,7 +103,6 @@ static int write_null_bytes(mtar_t* tar, int n)
 
     for(i = 0; i < n; i++) {
         err = twrite(tar, &nul, 1);
-
         if(err)
             return err;
     }
@@ -127,74 +110,101 @@ static int write_null_bytes(mtar_t* tar, int n)
     return MTAR_ESUCCESS;
 }
 
-static int raw_to_header(mtar_header_t* h, const mtar_raw_header_t* rh)
+enum {
+    NAME_OFF     = 0,                           NAME_LEN = 100,
+    MODE_OFF     = NAME_OFF+NAME_LEN,           MODE_LEN = 8,
+    OWNER_OFF    = MODE_OFF+MODE_LEN,           OWNER_LEN = 8,
+    GROUP_OFF    = OWNER_OFF+OWNER_LEN,         GROUP_LEN = 8,
+    SIZE_OFF     = GROUP_OFF+GROUP_LEN,         SIZE_LEN = 12,
+    MTIME_OFF    = SIZE_OFF+SIZE_LEN,           MTIME_LEN = 12,
+    CHKSUM_OFF   = MTIME_OFF+MTIME_LEN,         CHKSUM_LEN = 8,
+    TYPE_OFF     = CHKSUM_OFF+CHKSUM_LEN,
+    LINKNAME_OFF = TYPE_OFF+1,                  LINKNAME_LEN = 100,
+
+    HEADER_LEN   = 512,
+};
+
+static unsigned checksum(const char* raw)
 {
-    unsigned chksum1, chksum2;
+    unsigned i;
+    unsigned char* p = (unsigned char*)raw;
+    unsigned res = 256;
+
+    for(i = 0; i < CHKSUM_OFF; i++)
+        res += p[i];
+    for(i = TYPE_OFF; i < HEADER_LEN; i++)
+        res += p[i];
+
+    return res;
+}
+
+static int raw_to_header(mtar_header_t* h, const char* raw)
+{
+    unsigned chksum;
     int rc;
 
     /* If the checksum starts with a null byte we assume the record is NULL */
-    if(*rh->checksum == '\0')
+    if(raw[CHKSUM_OFF] == '\0')
         return MTAR_ENULLRECORD;
 
-    /* Build and compare checksum */
-    chksum1 = checksum(rh);
-    if((rc = parse_octal(rh->checksum, sizeof(rh->checksum), &chksum2)))
-        return rc;
-    if(chksum1 != chksum2)
+    /* Compare the checksum */
+    if((rc = parse_octal(&raw[CHKSUM_OFF], CHKSUM_LEN, &chksum)))
+       return rc;
+    if(chksum != checksum(raw))
         return MTAR_EBADCHKSUM;
 
     /* Load raw header into header */
-    if((rc = parse_octal(rh->mode, sizeof(rh->mode), &h->mode)))
+    if((rc = parse_octal(&raw[MODE_OFF], MODE_LEN, &h->mode)))
         return rc;
-    if((rc = parse_octal(rh->owner, sizeof(rh->owner), &h->owner)))
+    if((rc = parse_octal(&raw[OWNER_OFF], OWNER_LEN, &h->owner)))
         return rc;
-    if((rc = parse_octal(rh->group, sizeof(rh->group), &h->group)))
+    if((rc = parse_octal(&raw[GROUP_OFF], GROUP_LEN, &h->group)))
         return rc;
-    if((rc = parse_octal(rh->size, sizeof(rh->size), &h->size)))
+    if((rc = parse_octal(&raw[SIZE_OFF], SIZE_LEN, &h->size)))
         return rc;
-    if((rc = parse_octal(rh->mtime, sizeof(rh->mtime), &h->mtime)))
+    if((rc = parse_octal(&raw[MTIME_OFF], MTIME_LEN, &h->mtime)))
         return rc;
 
-    h->type = rh->type;
+    h->type = raw[TYPE_OFF];
 
-    memcpy(h->name, rh->name, sizeof(rh->name));
+    memcpy(h->name, &raw[NAME_OFF], NAME_LEN);
     h->name[sizeof(h->name) - 1] = 0;
 
-    memcpy(h->linkname, rh->linkname, sizeof(rh->linkname));
+    memcpy(h->linkname, &raw[LINKNAME_OFF], LINKNAME_LEN);
     h->linkname[sizeof(h->linkname) - 1] = 0;
 
     return MTAR_ESUCCESS;
 }
 
-static int header_to_raw(mtar_raw_header_t* rh, const mtar_header_t* h)
+static int header_to_raw(char* raw, const mtar_header_t* h)
 {
     unsigned chksum;
     int rc;
 
+    memset(raw, 0, HEADER_LEN);
+
     /* Load header into raw header */
-    memset(rh, 0, sizeof(*rh));
-
-    if((rc = print_octal(rh->mode, sizeof(rh->mode), h->mode)))
+    if((rc = print_octal(&raw[MODE_OFF], MODE_LEN, h->mode)))
         return rc;
-    if((rc = print_octal(rh->owner, sizeof(rh->owner), h->owner)))
+    if((rc = print_octal(&raw[OWNER_OFF], OWNER_LEN, h->owner)))
         return rc;
-    if((rc = print_octal(rh->group, sizeof(rh->group), h->group)))
+    if((rc = print_octal(&raw[GROUP_OFF], GROUP_LEN, h->group)))
         return rc;
-    if((rc = print_octal(rh->size, sizeof(rh->size), h->size)))
+    if((rc = print_octal(&raw[SIZE_OFF], SIZE_LEN, h->size)))
         return rc;
-    if((rc = print_octal(rh->mtime, sizeof(rh->mtime), h->mtime)))
+    if((rc = print_octal(&raw[MTIME_OFF], MTIME_LEN, h->mtime)))
         return rc;
 
-    rh->type = h->type ? h->type : MTAR_TREG;
-    strncpy(rh->name, h->name, sizeof(rh->name));
-    strncpy(rh->linkname, h->linkname, sizeof(rh->linkname));
+    raw[TYPE_OFF] = h->type ? h->type : MTAR_TREG;
+    strncpy(&raw[NAME_OFF], h->name, NAME_LEN);
+    strncpy(&raw[LINKNAME_OFF], h->linkname, NAME_LEN);
 
     /* Calculate and write checksum */
-    chksum = checksum(rh);
-    if((rc = print_octal(rh->checksum, 7, chksum)))
+    chksum = checksum(raw);
+    if((rc = print_octal(&raw[CHKSUM_OFF], CHKSUM_LEN-1, chksum)))
         return rc;
 
-    rh->checksum[7] = ' ';
+    raw[CHKSUM_OFF + CHKSUM_LEN - 1] = ' ';
 
     return MTAR_ESUCCESS;
 }
@@ -261,7 +271,7 @@ int mtar_next(mtar_t* tar)
         return err;
 
     /* Seek to next record */
-    n = round_up(tar->header.size, 512) + sizeof(mtar_raw_header_t);
+    n = round_up(tar->header.size, 512) + HEADER_LEN;
     return mtar_seek(tar, tar->pos + n);
 }
 
@@ -302,7 +312,7 @@ int mtar_read_header(mtar_t* tar, mtar_header_t* h)
     tar->last_header = tar->pos;
 
     /* Read raw header */
-    err = tread(tar, &tar->raw_header, sizeof(tar->raw_header));
+    err = tread(tar, tar->buffer, HEADER_LEN);
     if(err)
         return err;
 
@@ -312,7 +322,7 @@ int mtar_read_header(mtar_t* tar, mtar_header_t* h)
         return err;
 
     /* Load raw header into header struct and return */
-    return raw_to_header(h, &tar->raw_header);
+    return raw_to_header(h, tar->buffer);
 }
 
 int mtar_read_data(mtar_t* tar, void* ptr, unsigned size)
@@ -329,7 +339,7 @@ int mtar_read_data(mtar_t* tar, void* ptr, unsigned size)
             return err;
 
         /* Seek past header and init remaining data */
-        err = mtar_seek(tar, tar->pos + sizeof(mtar_raw_header_t));
+        err = mtar_seek(tar, tar->pos + HEADER_LEN);
         if(err)
             return err;
 
@@ -358,9 +368,9 @@ int mtar_read_data(mtar_t* tar, void* ptr, unsigned size)
 int mtar_write_header(mtar_t* tar, const mtar_header_t* h)
 {
     /* Build raw header and write */
-    header_to_raw(&tar->raw_header, h);
+    header_to_raw(tar->buffer, h);
     tar->remaining_data = h->size;
-    return twrite(tar, &tar->raw_header, sizeof(tar->raw_header));
+    return twrite(tar, tar->buffer, HEADER_LEN);
 }
 
 int mtar_write_file_header(mtar_t* tar, const char* name, unsigned size)
@@ -423,5 +433,5 @@ int mtar_write_data(mtar_t* tar, const void* data, unsigned size)
 int mtar_finalize(mtar_t* tar)
 {
     /* Write two NULL records */
-    return write_null_bytes(tar, sizeof(mtar_raw_header_t) * 2);
+    return write_null_bytes(tar, HEADER_LEN * 2);
 }
