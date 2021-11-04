@@ -23,7 +23,6 @@
 
 #include "microtar.h"
 #include <stdio.h>
-#include <string.h>
 
 static int file_read(void* stream, void* data, unsigned size)
 {
@@ -58,11 +57,6 @@ static const mtar_ops_t file_ops = {
 
 int mtar_open(mtar_t* tar, const char* filename, const char* mode)
 {
-    /* Ensure mode is always binary */
-    if(strchr(mode, 'r')) mode = "rb";
-    if(strchr(mode, 'w')) mode = "wb";
-    if(strchr(mode, 'a')) mode = "ab";
-
     /* Open file */
     FILE* file = fopen(filename, mode);
     if(!file)
