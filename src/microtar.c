@@ -179,6 +179,8 @@ static int raw_to_header(mtar_header_t* h, const char* raw)
         return rc;
 
     h->type = raw[TYPE_OFF];
+    if(!h->type)
+        h->type = MTAR_TREG;
 
     memcpy(h->name, &raw[NAME_OFF], NAME_LEN);
     h->name[sizeof(h->name) - 1] = 0;
