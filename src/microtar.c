@@ -370,3 +370,12 @@ int mtar_read_data(mtar_t* tar, void* ptr, unsigned size)
 
     return (int)size;
 }
+
+int mtar_eof_data(mtar_t* tar)
+{
+    /* API usage error, but just claim EOF. */
+    if(!(tar->state & S_HEADER_VALID))
+        return 1;
+
+    return tar->pos >= data_end_pos(tar) ? 1 : 0;
+}
