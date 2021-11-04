@@ -96,13 +96,15 @@ static int twrite(mtar_t* tar, const void* data, unsigned size)
     return err;
 }
 
-static int write_null_bytes(mtar_t* tar, int n)
+static int write_null_bytes(mtar_t* tar, size_t count)
 {
-    int i, err;
-    char nul = '\0';
+    int err;
+    size_t n;
 
-    for(i = 0; i < n; i++) {
-        err = twrite(tar, &nul, 1);
+    memset(tar->buffer, 0, sizeof(tar->buffer));
+    while(count > 0) {
+        n = count < sizeof(tar->buffer) ? count : sizeof(tar->buffer);
+        err = twrite(tar, tar->buffer, n);
         if(err)
             return err;
     }
