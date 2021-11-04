@@ -244,9 +244,14 @@ static int ensure_header(mtar_t* tar)
     return MTAR_ESUCCESS;
 }
 
+static unsigned data_beg_pos(const mtar_t* tar)
+{
+    return tar->header_pos + HEADER_LEN;
+}
+
 static unsigned data_end_pos(const mtar_t* tar)
 {
-    return tar->header_pos + HEADER_LEN + tar->header.size;
+    return data_beg_pos(tar) + tar->header.size;
 }
 
 const char* mtar_strerror(int err)
@@ -371,6 +376,45 @@ int mtar_read_data(mtar_t* tar, void* ptr, unsigned size)
         return err;
 
     return (int)size;
+}
+
+int mtar_seek_data(mtar_t* tar, int offset, int whence)
+{
+    if(!(tar->state & S_HEADER_VALID))
+        return MTAR_EAPI;
+
+    unsigned data_beg = data_beg_pos(tar);
+    unsigned data_end = data_end_pos(tar);
+    unsigned newpos;
+
+    switch(whence) {
+    case SEEK_SET:
+        if(offset < 0)
+            return MTAR_ESEEKRANGE;
+
+        newpos = data_beg + offset;
+        break;
+
+    case SEEK_CUR:
+        if((offset > 0 && (unsigned) offset > data_end - tar->pos) ||
+           (offset < 0 && (unsigned)-offset > tar->pos - data_beg))
+            return MTAR_ESEEKRANGE;
+
+        newpos = tar->pos + offset;
+        break;
+
+    case SEEK_END:
+        if(offset > 0)
+            return MTAR_ESEEKRANGE;
+
+        newpos = data_end + offset;
+        break;
+
+    default:
+        return MTAR_EAPI;
+    }
+
+    return tseek(tar, newpos);
 }
 
 int mtar_eof_data(mtar_t* tar)

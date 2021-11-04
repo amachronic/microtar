@@ -38,11 +38,12 @@ enum {
     MTAR_EREADFAIL    = -3,
     MTAR_EWRITEFAIL   = -4,
     MTAR_ESEEKFAIL    = -5,
-    MTAR_EBADCHKSUM   = -6,
-    MTAR_ENULLRECORD  = -7,
-    MTAR_ENOTFOUND    = -8,
-    MTAR_EOVERFLOW    = -9,
-    MTAR_EAPI         = -10,
+    MTAR_ESEEKRANGE   = -6,
+    MTAR_EBADCHKSUM   = -7,
+    MTAR_ENULLRECORD  = -9,
+    MTAR_ENOTFOUND    = -10,
+    MTAR_EOVERFLOW    = -11,
+    MTAR_EAPI         = -12,
     MTAR_ELAST        = MTAR_EAPI,
 };
 
@@ -106,6 +107,7 @@ int mtar_next(mtar_t* tar);
 int mtar_foreach(mtar_t* tar, mtar_foreach_cb cb, void* arg);
 int mtar_find(mtar_t* tar, const char* name);
 int mtar_read_data(mtar_t* tar, void* ptr, unsigned size);
+int mtar_seek_data(mtar_t* tar, int offset, int whence);
 int mtar_eof_data(mtar_t* tar);
 
 #ifdef __cplusplus
