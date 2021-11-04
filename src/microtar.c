@@ -315,20 +315,35 @@ int mtar_next(mtar_t* tar)
     return ensure_header(tar);
 }
 
-int mtar_find(mtar_t* tar, const char* name)
+int mtar_foreach(mtar_t* tar, mtar_foreach_cb cb, void* arg)
 {
-    /* seek to the beginning */
     int err = mtar_rewind(tar);
     if(err)
         return err;
 
-    /* iterate over all records */
     while((err = mtar_next(tar)) == MTAR_ESUCCESS)
-        if(!strcmp(tar->header.name, name))
-            return MTAR_ESUCCESS;
+        if((err = cb(tar, &tar->header, arg)) != 0)
+            return err;
 
-    /* hit the end of archive -> file not found */
     if(err == MTAR_ENULLRECORD)
+        err = MTAR_ESUCCESS;
+
+    return err;
+}
+
+static int find_foreach_cb(mtar_t* tar, const mtar_header_t* h, void* arg)
+{
+    (void)tar;
+    const char* name = (const char*)arg;
+    return strcmp(name, h->name) ? 0 : 1;
+}
+
+int mtar_find(mtar_t* tar, const char* name)
+{
+    int err = mtar_foreach(tar, find_foreach_cb, (void*)name);
+    if(err == 1)
+        err = MTAR_ESUCCESS;
+    else if(err == MTAR_ESUCCESS)
         err = MTAR_ENOTFOUND;
 
     return err;

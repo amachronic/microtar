@@ -43,6 +43,7 @@ enum {
     MTAR_ENOTFOUND    = -8,
     MTAR_EOVERFLOW    = -9,
     MTAR_EAPI         = -10,
+    MTAR_ELAST        = MTAR_EAPI,
 };
 
 enum {
@@ -58,6 +59,8 @@ enum {
 typedef struct mtar_header mtar_header_t;
 typedef struct mtar mtar_t;
 typedef struct mtar_ops mtar_ops_t;
+
+typedef int(*mtar_foreach_cb)(mtar_t*, const mtar_header_t*, void*);
 
 struct mtar_header {
     unsigned mode;
@@ -100,6 +103,7 @@ const mtar_header_t* mtar_get_header(const mtar_t* tar);
 
 int mtar_rewind(mtar_t* tar);
 int mtar_next(mtar_t* tar);
+int mtar_foreach(mtar_t* tar, mtar_foreach_cb cb, void* arg);
 int mtar_find(mtar_t* tar, const char* name);
 int mtar_read_data(mtar_t* tar, void* ptr, unsigned size);
 
