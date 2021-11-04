@@ -57,6 +57,7 @@ enum {
 typedef struct mtar_header mtar_header_t;
 typedef struct mtar_raw_header mtar_raw_header_t;
 typedef struct mtar mtar_t;
+typedef struct mtar_ops mtar_ops_t;
 
 struct mtar_header {
     unsigned mode;
@@ -82,12 +83,17 @@ struct mtar_raw_header {
     char _padding[255];
 };
 
+struct mtar_ops {
+    int(*read)(void* stream, void* data, unsigned size);
+    int(*write)(void* stream, const void* data, unsigned size);
+    int(*seek)(void* stream, unsigned pos);
+    int(*close)(void* stream);
+};
+
 struct mtar {
-    int (*read)(mtar_t* tar, void* data, unsigned size);
-    int (*write)(mtar_t* tar, const void* data, unsigned size);
-    int (*seek)(mtar_t* tar, unsigned pos);
-    int (*close)(mtar_t* tar);
+    const mtar_ops_t* ops;
     void* stream;
+
     unsigned pos;
     unsigned remaining_data;
     unsigned last_header;
@@ -98,7 +104,10 @@ struct mtar {
 const char* mtar_strerror(int err);
 
 int mtar_open(mtar_t* tar, const char* filename, const char* mode);
+
+int mtar_init(mtar_t* tar, const mtar_ops_t* ops, void* stream);
 int mtar_close(mtar_t* tar);
+int mtar_is_open(mtar_t* tar);
 
 int mtar_seek(mtar_t* tar, unsigned pos);
 int mtar_rewind(mtar_t* tar);

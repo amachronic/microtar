@@ -99,7 +99,7 @@ static unsigned checksum(const mtar_raw_header_t* rh)
 
 static int tread(mtar_t* tar, void* data, unsigned size)
 {
-    int err = tar->read(tar, data, size);
+    int err = tar->ops->read(tar->stream, data, size);
     tar->pos += size;
     return err;
 }
@@ -107,7 +107,7 @@ static int tread(mtar_t* tar, void* data, unsigned size)
 
 static int twrite(mtar_t* tar, const void* data, unsigned size)
 {
-    int err = tar->write(tar, data, size);
+    int err = tar->ops->write(tar->stream, data, size);
     tar->pos += size;
     return err;
 }
@@ -216,16 +216,32 @@ const char* mtar_strerror(int err)
     }
 }
 
+int mtar_init(mtar_t* tar, const mtar_ops_t* ops, void* stream)
+{
+    memset(tar, 0, sizeof(mtar_t));
+    tar->ops = ops;
+    tar->stream = stream;
+    return 0;
+}
+
 int mtar_close(mtar_t* tar)
 {
-    return tar->close(tar);
+    int err = tar->ops->close(tar->stream);
+    tar->ops = NULL;
+    tar->stream = NULL;
+    return err;
 }
 
 int mtar_seek(mtar_t* tar, unsigned pos)
 {
-    int err = tar->seek(tar, pos);
+    int err = tar->ops->seek(tar->stream, pos);
     tar->pos = pos;
     return err;
+}
+
+int mtar_is_open(mtar_t* tar)
+{
+    return (tar->ops != NULL) ? 1 : 0;
 }
 
 int mtar_rewind(mtar_t* tar)
