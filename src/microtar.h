@@ -30,7 +30,7 @@ extern "C" {
 
 #include <stdio.h>  /* SEEK_SET et al. */
 
-enum {
+enum mtar_error {
     MTAR_ESUCCESS     =  0,
     MTAR_EFAILURE     = -1,
     MTAR_EOPENFAIL    = -2,
@@ -48,7 +48,7 @@ enum {
     MTAR_ELAST        = MTAR_ETOOSHORT,
 };
 
-enum {
+enum mtar_type {
     MTAR_TREG   = '0',
     MTAR_TLNK   = '1',
     MTAR_TSYM   = '2',
@@ -58,7 +58,7 @@ enum {
     MTAR_TFIFO  = '6',
 };
 
-enum {
+enum mtar_access {
     MTAR_READ,
     MTAR_WRITE,
 };
