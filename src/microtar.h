@@ -121,7 +121,7 @@ int mtar_write_header(mtar_t* tar, const mtar_header_t* h);
 int mtar_write_file_header(mtar_t* tar, const char* name, unsigned size);
 int mtar_write_dir_header(mtar_t* tar, const char* name);
 int mtar_write_data(mtar_t* tar, const void* ptr, unsigned size);
-
+int mtar_end_record(mtar_t* tar);
 int mtar_finalize(mtar_t* tar);
 
 #ifdef __cplusplus

@@ -575,6 +575,14 @@ int mtar_write_data(mtar_t* tar, const void* ptr, unsigned size)
     return (int)size;
 }
 
+int mtar_end_record(mtar_t* tar)
+{
+    if(tar->access != MTAR_WRITE)
+        return MTAR_EAPI;
+
+    return ensure_eof(tar);
+}
+
 int mtar_finalize(mtar_t* tar)
 {
     if(tar->access != MTAR_WRITE)
