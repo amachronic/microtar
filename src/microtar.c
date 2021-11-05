@@ -104,16 +104,20 @@ static unsigned round_up_512(unsigned n)
 
 static int tread(mtar_t* tar, void* data, unsigned size)
 {
-    int err = tar->ops->read(tar->stream, data, size);
-    tar->pos += size;
-    return err;
+    int ret = tar->ops->read(tar->stream, data, size);
+    if(ret >= 0)
+        tar->pos += ret;
+
+    return ret;
 }
 
 static int twrite(mtar_t* tar, const void* data, unsigned size)
 {
-    int err = tar->ops->write(tar->stream, data, size);
-    tar->pos += size;
-    return err;
+    int ret = tar->ops->write(tar->stream, data, size);
+    if(ret >= 0)
+        tar->pos += ret;
+
+    return ret;
 }
 
 static int tseek(mtar_t* tar, unsigned pos)
@@ -125,15 +129,17 @@ static int tseek(mtar_t* tar, unsigned pos)
 
 static int write_null_bytes(mtar_t* tar, size_t count)
 {
-    int err;
+    int ret;
     size_t n;
 
     memset(tar->buffer, 0, sizeof(tar->buffer));
     while(count > 0) {
         n = count < sizeof(tar->buffer) ? count : sizeof(tar->buffer);
-        err = twrite(tar, tar->buffer, n);
-        if(err)
-            return err;
+        ret = twrite(tar, tar->buffer, n);
+        if(ret < 0)
+            return ret;
+        if(ret != (int)n)
+            return MTAR_EWRITEFAIL;
     }
 
     return MTAR_ESUCCESS;
@@ -242,15 +248,17 @@ static int header_to_raw(char* raw, const mtar_header_t* h)
 
 static int ensure_header(mtar_t* tar)
 {
-    int err;
+    int ret, err;
 
     if(tar->state & S_HEADER_VALID)
         return MTAR_ESUCCESS;
 
     tar->header_pos = tar->pos;
-    err = tread(tar, tar->buffer, HEADER_LEN);
-    if(err)
-        return err;
+    ret = tread(tar, tar->buffer, HEADER_LEN);
+    if(ret < 0)
+        return ret;
+    if(ret != HEADER_LEN)
+        return MTAR_EREADFAIL;
 
     err = raw_to_header(&tar->header, tar->buffer);
     if(err)
@@ -429,11 +437,7 @@ int mtar_read_data(mtar_t* tar, void* ptr, unsigned size)
     if(data_left < size)
         size = data_left;
 
-    int err = tread(tar, ptr, size);
-    if(err)
-        return err;
-
-    return (int)size;
+    return tread(tar, ptr, size);
 }
 
 int mtar_seek_data(mtar_t* tar, int offset, int whence)
@@ -507,9 +511,11 @@ int mtar_write_header(mtar_t* tar, const mtar_header_t* h)
     if(err)
         return err;
 
-    err = twrite(tar, tar->buffer, HEADER_LEN);
-    if(err)
-        return err;
+    int ret = twrite(tar, tar->buffer, HEADER_LEN);
+    if(ret < 0)
+        return ret;
+    if(ret != HEADER_LEN)
+        return MTAR_EWRITEFAIL;
 
     tar->state |= S_WROTE_HEADER;
     return MTAR_ESUCCESS;
@@ -566,13 +572,8 @@ int mtar_write_data(mtar_t* tar, const void* ptr, unsigned size)
     if(size > data_left)
         size = data_left;
 
-    if(size > 0)
-        tar->state |= S_WROTE_DATA;
-    int err = twrite(tar, ptr, size);
-    if(err)
-        return err;
-
-    return (int)size;
+    tar->state |= S_WROTE_DATA;
+    return twrite(tar, ptr, size);
 }
 
 int mtar_end_record(mtar_t* tar)

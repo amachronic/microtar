@@ -28,13 +28,19 @@
 static int file_read(void* stream, void* data, unsigned size)
 {
     unsigned res = fread(data, 1, size, (FILE*)stream);
-    return (res == size) ? MTAR_ESUCCESS : MTAR_EREADFAIL;
+    if(res != size && ferror((FILE*)stream))
+        return MTAR_EREADFAIL;
+
+    return res;
 }
 
 static int file_write(void* stream, const void* data, unsigned size)
 {
     unsigned res = fwrite(data, 1, size, (FILE*)stream);
-    return (res == size) ? MTAR_ESUCCESS : MTAR_EWRITEFAIL;
+    if(res != size && ferror((FILE*)stream))
+       return MTAR_EWRITEFAIL;
+
+    return res;
 }
 
 static int file_seek(void* stream, unsigned offset)
