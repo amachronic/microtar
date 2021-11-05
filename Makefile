@@ -1,5 +1,5 @@
 CPPFLAGS = -Isrc
-CFLAGS = -std=c99 -Wall -Wextra
+CFLAGS = -std=c99 -Wall -Wextra -O2
 
 MTAR_OBJ = mtar.o
 MTAR_BIN = mtar
