@@ -16,6 +16,10 @@ $(MICROTAR_LIB): $(MICROTAR_OBJ)
 %.o: %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
+src/microtar.o: src/microtar.h
+src/microtar-stdio.o: src/microtar.h
+mtar.o: src/microtar.h
+
 clean:
 	rm -f $(MICROTAR_LIB) $(MICROTAR_OBJ)
 	rm -f $(MTAR_BIN) $(MTAR_OBJ)
