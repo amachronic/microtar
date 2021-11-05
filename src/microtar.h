@@ -28,8 +28,7 @@
 extern "C" {
 #endif
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <stdio.h>  /* SEEK_SET et al. */
 
 enum {
     MTAR_ESUCCESS     =  0,
