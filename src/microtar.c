@@ -327,6 +327,11 @@ const mtar_header_t* mtar_get_header(const mtar_t* tar)
         return NULL;
 }
 
+int mtar_access_mode(const mtar_t* tar)
+{
+    return tar->access;
+}
+
 int mtar_rewind(mtar_t* tar)
 {
     if(tar->access != MTAR_READ)

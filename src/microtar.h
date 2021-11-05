@@ -108,6 +108,7 @@ int mtar_close(mtar_t* tar);
 int mtar_is_open(mtar_t* tar);
 
 const mtar_header_t* mtar_get_header(const mtar_t* tar);
+int mtar_access_mode(const mtar_t* tar);
 
 int mtar_rewind(mtar_t* tar);
 int mtar_next(mtar_t* tar);
