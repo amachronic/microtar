@@ -214,7 +214,7 @@ static int header_to_raw(char* raw, const mtar_header_t* h)
 
     raw[TYPE_OFF] = h->type ? h->type : MTAR_TREG;
     strncpy(&raw[NAME_OFF], h->name, NAME_LEN);
-    strncpy(&raw[LINKNAME_OFF], h->linkname, NAME_LEN);
+    strncpy(&raw[LINKNAME_OFF], h->linkname, LINKNAME_LEN);
 
     /* Calculate and write checksum */
     chksum = checksum(raw);
