@@ -140,6 +140,8 @@ static int write_null_bytes(mtar_t* tar, size_t count)
             return ret;
         if(ret != (int)n)
             return MTAR_EWRITEFAIL;
+
+        count -= n;
     }
 
     return MTAR_ESUCCESS;
