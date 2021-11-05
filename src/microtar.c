@@ -28,7 +28,11 @@
 #include <string.h>
 
 enum {
-    S_HEADER_VALID = 1 << 0,
+    S_HEADER_VALID   = 1 << 0,
+    S_WROTE_HEADER   = 1 << 1,
+    S_WROTE_DATA     = 1 << 2,
+    S_WROTE_DATA_EOF = 1 << 3,
+    S_WROTE_FINALIZE = 1 << 4,
 };
 
 enum {
@@ -244,6 +248,19 @@ static int ensure_header(mtar_t* tar)
     return MTAR_ESUCCESS;
 }
 
+static int ensure_eof(mtar_t* tar)
+{
+    if(!(tar->state & S_WROTE_DATA) || (tar->state & S_WROTE_DATA_EOF))
+        return MTAR_ESUCCESS;
+
+    int err = write_null_bytes(tar, round_up_512(tar->pos) - tar->pos);
+    if(err)
+        return err;
+
+    tar->state |= S_WROTE_DATA_EOF;
+    return MTAR_ESUCCESS;
+}
+
 static unsigned data_beg_pos(const mtar_t* tar)
 {
     return tar->header_pos + HEADER_LEN;
@@ -263,11 +280,13 @@ const char* mtar_strerror(int err)
     case MTAR_EREADFAIL:    return "could not read";
     case MTAR_EWRITEFAIL:   return "could not write";
     case MTAR_ESEEKFAIL:    return "could not seek";
+    case MTAR_ESEEKRANGE:   return "seek out of bounds";
     case MTAR_EBADCHKSUM:   return "bad checksum";
     case MTAR_ENULLRECORD:  return "null record";
     case MTAR_ENOTFOUND:    return "file not found";
     case MTAR_EOVERFLOW:    return "overflow";
     case MTAR_EAPI:         return "API usage error";
+    case MTAR_ENAMETOOLONG: return "name too long";
     default:                return "unknown error";
     }
 }
@@ -282,10 +301,16 @@ int mtar_init(mtar_t* tar, const mtar_ops_t* ops, void* stream)
 
 int mtar_close(mtar_t* tar)
 {
-    int err = tar->ops->close(tar->stream);
+    int err1 = mtar_finalize(tar);
+    int err2 = tar->ops->close(tar->stream);
+
     tar->ops = NULL;
     tar->stream = NULL;
-    return err;
+
+    if(err1)
+        return err1;
+    else
+        return err2;
 }
 
 int mtar_is_open(mtar_t* tar)
@@ -424,4 +449,102 @@ int mtar_eof_data(mtar_t* tar)
         return 1;
 
     return tar->pos >= data_end_pos(tar) ? 1 : 0;
+}
+
+int mtar_write_header(mtar_t* tar, const mtar_header_t* h)
+{
+    if(tar->state & S_WROTE_FINALIZE)
+        return MTAR_EAPI;
+
+    int err = ensure_eof(tar);
+    if(err)
+        return err;
+
+    tar->state &= ~(S_WROTE_HEADER | S_WROTE_DATA | S_WROTE_DATA_EOF);
+    if(h != &tar->header)
+        tar->header = *h;
+
+    err = header_to_raw(tar->buffer, h);
+    if(err)
+        return err;
+
+    err = twrite(tar, tar->buffer, HEADER_LEN);
+    if(err)
+        return err;
+
+    tar->state |= S_WROTE_HEADER;
+    return MTAR_ESUCCESS;
+}
+
+int mtar_write_file_header(mtar_t* tar, const char* name, unsigned size)
+{
+    size_t namelen = strlen(name);
+    if(namelen > NAME_LEN)
+        return MTAR_ENAMETOOLONG;
+
+    tar->header.mode = 0644;
+    tar->header.owner = 0;
+    tar->header.group = 0;
+    tar->header.size = size;
+    tar->header.mtime = 0;
+    tar->header.type = MTAR_TREG;
+    memcpy(tar->header.name, name, namelen + 1);
+    tar->header.linkname[0] = '\0';
+
+    return mtar_write_header(tar, &tar->header);
+}
+
+int mtar_write_dir_header(mtar_t* tar, const char* name)
+{
+    size_t namelen = strlen(name);
+    if(namelen > NAME_LEN)
+        return MTAR_ENAMETOOLONG;
+
+    tar->header.mode = 0755;
+    tar->header.owner = 0;
+    tar->header.group = 0;
+    tar->header.size = 0;
+    tar->header.mtime = 0;
+    tar->header.type = MTAR_TDIR;
+    memcpy(tar->header.name, name, namelen + 1);
+    tar->header.linkname[0] = '\0';
+
+    return mtar_write_header(tar, &tar->header);
+}
+
+int mtar_write_data(mtar_t* tar, const void* ptr, unsigned size)
+{
+    if(!(tar->state & S_WROTE_HEADER) || (tar->state & S_WROTE_FINALIZE))
+        return MTAR_EAPI;
+
+    /* don't allow writing more than was specified in the header,
+     * as this would require seeking back & updating it */
+    unsigned data_end = data_end_pos(tar);
+    if(tar->pos >= data_end)
+        return 0;
+
+    unsigned data_left = tar->pos - data_end;
+    if(size > data_left)
+        size = data_left;
+
+    if(size > 0)
+        tar->state |= S_WROTE_DATA;
+    int err = twrite(tar, ptr, size);
+    if(err)
+        return err;
+
+    return (int)size;
+}
+
+int mtar_finalize(mtar_t* tar)
+{
+    if(tar->state & S_WROTE_FINALIZE)
+        return MTAR_ESUCCESS;
+
+    int err = ensure_eof(tar);
+    if(err)
+        return err;
+
+    tar->state |= S_WROTE_FINALIZE;
+    return write_null_bytes(tar, 1024);
 }
