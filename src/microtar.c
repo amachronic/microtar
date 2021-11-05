@@ -213,8 +213,22 @@ static int header_to_raw(char* raw, const mtar_header_t* h)
         return rc;
 
     raw[TYPE_OFF] = h->type ? h->type : MTAR_TREG;
+
+#ifdef __GNUC__
+/* Sigh. GCC wrongly assumes the output of strncpy() is supposed to be
+ * a null-terminated string -- which it is not, and we are relying on
+ * that fact here -- and tries to warn about 'string truncation' because
+ * the null terminator might not be copied. Just suppress the warning. */
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wstringop-truncation"
+#endif
+
     strncpy(&raw[NAME_OFF], h->name, NAME_LEN);
     strncpy(&raw[LINKNAME_OFF], h->linkname, LINKNAME_LEN);
+
+#ifdef __GNUC__
+# pragma GCC diagnostic pop
+#endif
 
     /* Calculate and write checksum */
     chksum = checksum(raw);
