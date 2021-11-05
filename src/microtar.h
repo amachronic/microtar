@@ -100,8 +100,6 @@ struct mtar {
 
 const char* mtar_strerror(int err);
 
-int mtar_open(mtar_t* tar, const char* filename, const char* mode);
-
 int mtar_init(mtar_t* tar, int access, const mtar_ops_t* ops, void* stream);
 int mtar_close(mtar_t* tar);
 int mtar_is_open(mtar_t* tar);
