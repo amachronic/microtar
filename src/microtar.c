@@ -260,19 +260,6 @@ static int ensure_header(mtar_t* tar)
     return MTAR_ESUCCESS;
 }
 
-static int ensure_eof(mtar_t* tar)
-{
-    if(!(tar->state & S_WROTE_DATA) || (tar->state & S_WROTE_DATA_EOF))
-        return MTAR_ESUCCESS;
-
-    int err = write_null_bytes(tar, round_up_512(tar->pos) - tar->pos);
-    if(err)
-        return err;
-
-    tar->state |= S_WROTE_DATA_EOF;
-    return MTAR_ESUCCESS;
-}
-
 static unsigned data_beg_pos(const mtar_t* tar)
 {
     return tar->header_pos + HEADER_LEN;
@@ -281,6 +268,23 @@ static unsigned data_beg_pos(const mtar_t* tar)
 static unsigned data_end_pos(const mtar_t* tar)
 {
     return data_beg_pos(tar) + tar->header.size;
+}
+
+static int ensure_eof(mtar_t* tar)
+{
+    if(!(tar->state & S_WROTE_DATA) || (tar->state & S_WROTE_DATA_EOF))
+        return MTAR_ESUCCESS;
+
+    /* make sure the caller wrote out the expected amount of data */
+    if(tar->pos < data_end_pos(tar))
+        return MTAR_ETOOSHORT;
+
+    int err = write_null_bytes(tar, round_up_512(tar->pos) - tar->pos);
+    if(err)
+        return err;
+
+    tar->state |= S_WROTE_DATA_EOF;
+    return MTAR_ESUCCESS;
 }
 
 const char* mtar_strerror(int err)
@@ -299,6 +303,7 @@ const char* mtar_strerror(int err)
     case MTAR_EOVERFLOW:    return "overflow";
     case MTAR_EAPI:         return "API usage error";
     case MTAR_ENAMETOOLONG: return "name too long";
+    case MTAR_ETOOSHORT:    return "file too short";
     default:                return "unknown error";
     }
 }

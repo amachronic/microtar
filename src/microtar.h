@@ -44,7 +44,8 @@ enum {
     MTAR_EOVERFLOW    = -11,
     MTAR_EAPI         = -12,
     MTAR_ENAMETOOLONG = -13,
-    MTAR_ELAST        = MTAR_ENAMETOOLONG,
+    MTAR_ETOOSHORT    = -14,
+    MTAR_ELAST        = MTAR_ETOOSHORT,
 };
 
 enum {
