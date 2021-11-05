@@ -11,7 +11,7 @@ $(MTAR_BIN): $(MTAR_OBJ) $(MICROTAR_LIB)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $^
 
 $(MICROTAR_LIB): $(MICROTAR_OBJ)
-	$(AR) r $@ $^
+	$(AR) cr $@ $^
 
 %.o: %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
