@@ -291,9 +291,10 @@ const char* mtar_strerror(int err)
     }
 }
 
-int mtar_init(mtar_t* tar, const mtar_ops_t* ops, void* stream)
+int mtar_init(mtar_t* tar, int access, const mtar_ops_t* ops, void* stream)
 {
     memset(tar, 0, sizeof(mtar_t));
+    tar->access = access;
     tar->ops = ops;
     tar->stream = stream;
     return 0;
@@ -301,7 +302,7 @@ int mtar_init(mtar_t* tar, const mtar_ops_t* ops, void* stream)
 
 int mtar_close(mtar_t* tar)
 {
-    int err1 = mtar_finalize(tar);
+    int err1 = tar->access == MTAR_WRITE ? mtar_finalize(tar) : MTAR_ESUCCESS;
     int err2 = tar->ops->close(tar->stream);
 
     tar->ops = NULL;
@@ -328,6 +329,9 @@ const mtar_header_t* mtar_get_header(const mtar_t* tar)
 
 int mtar_rewind(mtar_t* tar)
 {
+    if(tar->access != MTAR_READ)
+        return MTAR_EAPI;
+
     int err = tseek(tar, 0);
     tar->state = 0;
     return err;
@@ -335,6 +339,9 @@ int mtar_rewind(mtar_t* tar)
 
 int mtar_next(mtar_t* tar)
 {
+    if(tar->access != MTAR_READ)
+        return MTAR_EAPI;
+
     if(tar->state & S_HEADER_VALID) {
         tar->state &= ~S_HEADER_VALID;
 
@@ -349,6 +356,9 @@ int mtar_next(mtar_t* tar)
 
 int mtar_foreach(mtar_t* tar, mtar_foreach_cb cb, void* arg)
 {
+    if(tar->access != MTAR_READ)
+        return MTAR_EAPI;
+
     int err = mtar_rewind(tar);
     if(err)
         return err;
@@ -383,6 +393,8 @@ int mtar_find(mtar_t* tar, const char* name)
 
 int mtar_read_data(mtar_t* tar, void* ptr, unsigned size)
 {
+    if(tar->access != MTAR_READ)
+        return MTAR_EAPI;
     if(!(tar->state & S_HEADER_VALID))
         return MTAR_EAPI;
 
@@ -405,6 +417,8 @@ int mtar_read_data(mtar_t* tar, void* ptr, unsigned size)
 
 int mtar_seek_data(mtar_t* tar, int offset, int whence)
 {
+    if(tar->access != MTAR_READ)
+        return MTAR_EAPI;
     if(!(tar->state & S_HEADER_VALID))
         return MTAR_EAPI;
 
@@ -444,7 +458,9 @@ int mtar_seek_data(mtar_t* tar, int offset, int whence)
 
 int mtar_eof_data(mtar_t* tar)
 {
-    /* API usage error, but just claim EOF. */
+    /* API usage errors, but just claim EOF. */
+    if(tar->access != MTAR_READ)
+        return 1;
     if(!(tar->state & S_HEADER_VALID))
         return 1;
 
@@ -453,6 +469,8 @@ int mtar_eof_data(mtar_t* tar)
 
 int mtar_write_header(mtar_t* tar, const mtar_header_t* h)
 {
+    if(tar->access != MTAR_WRITE)
+        return MTAR_EAPI;
     if(tar->state & S_WROTE_FINALIZE)
         return MTAR_EAPI;
 
@@ -538,6 +556,8 @@ int mtar_write_data(mtar_t* tar, const void* ptr, unsigned size)
 
 int mtar_finalize(mtar_t* tar)
 {
+    if(tar->access != MTAR_WRITE)
+        return MTAR_EAPI;
     if(tar->state & S_WROTE_FINALIZE)
         return MTAR_ESUCCESS;
 

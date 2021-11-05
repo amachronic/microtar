@@ -58,6 +58,11 @@ enum {
     MTAR_TFIFO  = '6',
 };
 
+enum {
+    MTAR_READ,
+    MTAR_WRITE,
+};
+
 typedef struct mtar_header mtar_header_t;
 typedef struct mtar mtar_t;
 typedef struct mtar_ops mtar_ops_t;
@@ -86,6 +91,7 @@ struct mtar {
     char buffer[512];       /* IO buffer, put first to allow library users to
                              * control its alignment */
     int state;              /* Used to simplify the API and verify API usage */
+    int access;             /* Access mode */
     unsigned pos;           /* Current position in file */
     unsigned header_pos;    /* Position of the current header */
     mtar_header_t header;   /* Most recently parsed header */
@@ -97,7 +103,7 @@ const char* mtar_strerror(int err);
 
 int mtar_open(mtar_t* tar, const char* filename, const char* mode);
 
-int mtar_init(mtar_t* tar, const mtar_ops_t* ops, void* stream);
+int mtar_init(mtar_t* tar, int access, const mtar_ops_t* ops, void* stream);
 int mtar_close(mtar_t* tar);
 int mtar_is_open(mtar_t* tar);
 
