@@ -303,13 +303,12 @@ const char* mtar_strerror(int err)
     }
 }
 
-int mtar_init(mtar_t* tar, int access, const mtar_ops_t* ops, void* stream)
+void mtar_init(mtar_t* tar, int access, const mtar_ops_t* ops, void* stream)
 {
     memset(tar, 0, sizeof(mtar_t));
     tar->access = access;
     tar->ops = ops;
     tar->stream = stream;
-    return 0;
 }
 
 int mtar_close(mtar_t* tar)

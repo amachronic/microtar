@@ -77,5 +77,6 @@ int mtar_open(mtar_t* tar, const char* filename, const char* mode)
     if(!file)
         return MTAR_EOPENFAIL;
 
-    return mtar_init(tar, access, &file_ops, file);
+    mtar_init(tar, access, &file_ops, file);
+    return MTAR_ESUCCESS;
 }
