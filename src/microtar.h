@@ -45,6 +45,7 @@ enum mtar_error {
     MTAR_EAPI         = -12,
     MTAR_ENAMETOOLONG = -13,
     MTAR_ETOOSHORT    = -14,
+    MTAR_EACCESS      = -15,
     MTAR_ELAST        = MTAR_ETOOSHORT,
 };
 
