@@ -338,8 +338,10 @@ int mtar_access_mode(const mtar_t* tar)
 
 int mtar_rewind(mtar_t* tar)
 {
+#ifndef MICROTAR_DISABLE_API_CHECKS
     if(tar->access != MTAR_READ)
         return MTAR_EAPI;
+#endif
 
     int err = tseek(tar, 0);
     tar->state = 0;
@@ -348,8 +350,10 @@ int mtar_rewind(mtar_t* tar)
 
 int mtar_next(mtar_t* tar)
 {
+#ifndef MICROTAR_DISABLE_API_CHECKS
     if(tar->access != MTAR_READ)
         return MTAR_EACCESS;
+#endif
 
     if(tar->state & S_HEADER_VALID) {
         tar->state &= ~S_HEADER_VALID;
@@ -365,8 +369,10 @@ int mtar_next(mtar_t* tar)
 
 int mtar_foreach(mtar_t* tar, mtar_foreach_cb cb, void* arg)
 {
+#ifndef MICROTAR_DISABLE_API_CHECKS
     if(tar->access != MTAR_READ)
         return MTAR_EACCESS;
+#endif
 
     int err = mtar_rewind(tar);
     if(err)
@@ -402,10 +408,12 @@ int mtar_find(mtar_t* tar, const char* name)
 
 int mtar_read_data(mtar_t* tar, void* ptr, unsigned size)
 {
+#ifndef MICROTAR_DISABLE_API_CHECKS
     if(tar->access != MTAR_READ)
         return MTAR_EACCESS;
     if(!(tar->state & S_HEADER_VALID))
         return MTAR_EAPI;
+#endif
 
     /* have we reached end of file? */
     unsigned data_end = data_end_pos(tar);
@@ -422,10 +430,12 @@ int mtar_read_data(mtar_t* tar, void* ptr, unsigned size)
 
 int mtar_seek_data(mtar_t* tar, int offset, int whence)
 {
+#ifndef MICROTAR_DISABLE_API_CHECKS
     if(tar->access != MTAR_READ)
         return MTAR_EACCESS;
     if(!(tar->state & S_HEADER_VALID))
         return MTAR_EAPI;
+#endif
 
     unsigned data_beg = data_beg_pos(tar);
     unsigned data_end = data_end_pos(tar);
@@ -474,11 +484,13 @@ int mtar_eof_data(mtar_t* tar)
 
 int mtar_write_header(mtar_t* tar, const mtar_header_t* h)
 {
+#ifndef MICROTAR_DISABLE_API_CHECKS
     if(tar->access != MTAR_WRITE)
         return MTAR_EACCESS;
     if(((tar->state & S_WROTE_DATA) && !(tar->state & S_WROTE_DATA_EOF)) ||
        (tar->state & S_WROTE_FINALIZE))
         return MTAR_EAPI;
+#endif
 
     tar->state &= ~(S_WROTE_HEADER | S_WROTE_DATA | S_WROTE_DATA_EOF);
     tar->header_pos = tar->pos;
@@ -537,12 +549,14 @@ int mtar_write_dir_header(mtar_t* tar, const char* name)
 
 int mtar_write_data(mtar_t* tar, const void* ptr, unsigned size)
 {
+#ifndef MICROTAR_DISABLE_API_CHECKS
     if(tar->access != MTAR_WRITE)
         return MTAR_EACCESS;
     if(!(tar->state & S_WROTE_HEADER) ||
        (tar->state & S_WROTE_DATA_EOF) ||
        (tar->state & S_WROTE_FINALIZE))
         return MTAR_EAPI;
+#endif
 
     /* don't allow writing more than was specified in the header,
      * as this would require seeking back & updating it */
@@ -560,11 +574,13 @@ int mtar_write_data(mtar_t* tar, const void* ptr, unsigned size)
 
 int mtar_end_data(mtar_t* tar)
 {
+#ifndef MICROTAR_DISABLE_API_CHECKS
     if(tar->access != MTAR_WRITE)
         return MTAR_EACCESS;
     if((tar->state & S_WROTE_DATA_EOF) ||
        (tar->state & S_WROTE_FINALIZE))
         return MTAR_EAPI;
+#endif
 
     /* make sure the caller wrote out the expected amount of data */
     if(tar->pos < data_end_pos(tar))
@@ -580,11 +596,13 @@ int mtar_end_data(mtar_t* tar)
 
 int mtar_finalize(mtar_t* tar)
 {
+#ifndef MICROTAR_DISABLE_API_CHECKS
     if(tar->access != MTAR_WRITE)
         return MTAR_EACCESS;
     if(((tar->state & S_WROTE_DATA) && !(tar->state & S_WROTE_DATA_EOF)) ||
        (tar->state & S_WROTE_FINALIZE))
         return MTAR_EAPI;
+#endif
 
     tar->state |= S_WROTE_FINALIZE;
     return write_null_bytes(tar, 1024);
