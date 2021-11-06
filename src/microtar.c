@@ -222,7 +222,7 @@ static int header_to_raw(char* raw, const mtar_header_t* h)
 
     raw[TYPE_OFF] = h->type ? h->type : MTAR_TREG;
 
-#ifdef __GNUC__
+#if defined(__GNUC__) && (__GNUC__ >= 8)
 /* Sigh. GCC wrongly assumes the output of strncpy() is supposed to be
  * a null-terminated string -- which it is not, and we are relying on
  * that fact here -- and tries to warn about 'string truncation' because
@@ -234,7 +234,7 @@ static int header_to_raw(char* raw, const mtar_header_t* h)
     strncpy(&raw[NAME_OFF], h->name, NAME_LEN);
     strncpy(&raw[LINKNAME_OFF], h->linkname, LINKNAME_LEN);
 
-#ifdef __GNUC__
+#if defined(__GNUC__) && (__GNUC__ >= 8)
 # pragma GCC diagnostic pop
 #endif
 
