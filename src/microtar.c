@@ -471,6 +471,18 @@ int mtar_seek_data(mtar_t* tar, int offset, int whence)
     return tseek(tar, newpos);
 }
 
+unsigned mtar_tell_data(mtar_t* tar)
+{
+#ifndef MICROTAR_DISABLE_API_CHECKS
+    if(tar->access != MTAR_READ)
+        return MTAR_EACCESS;
+    if(!(tar->state & S_HEADER_VALID))
+        return MTAR_EAPI;
+#endif
+
+    return tar->pos - data_beg_pos(tar);
+}
+
 int mtar_eof_data(mtar_t* tar)
 {
     /* API usage errors, but just claim EOF. */

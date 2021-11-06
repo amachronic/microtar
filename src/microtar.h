@@ -116,6 +116,7 @@ int mtar_find(mtar_t* tar, const char* name);
 
 int mtar_read_data(mtar_t* tar, void* ptr, unsigned size);
 int mtar_seek_data(mtar_t* tar, int offset, int whence);
+unsigned mtar_tell_data(mtar_t* tar);
 int mtar_eof_data(mtar_t* tar);
 
 int mtar_write_header(mtar_t* tar, const mtar_header_t* h);
