@@ -579,8 +579,9 @@ int mtar_finalize(mtar_t* tar)
 {
     if(tar->access != MTAR_WRITE)
         return MTAR_EAPI;
-    if(tar->state & S_WROTE_FINALIZE)
-        return MTAR_ESUCCESS;
+    if(((tar->state & S_WROTE_DATA) && !(tar->state & S_WROTE_DATA_EOF)) ||
+       (tar->state & S_WROTE_FINALIZE))
+        return MTAR_EAPI;
 
     tar->state |= S_WROTE_FINALIZE;
     return write_null_bytes(tar, 1024);
