@@ -91,7 +91,7 @@ int extract_foreach_cb(mtar_t* tar, const mtar_header_t* h, void* arg)
         return 0;
     }
 
-    int fd = open(h->name, O_CREAT|O_WRONLY, h->mode);
+    int fd = open(h->name, O_CREAT|O_WRONLY|O_TRUNC, h->mode);
     if(fd < 0)
         die(E_FS, "extracting \"%s\" failed: %s", h->name, strerror(errno));
 
@@ -119,6 +119,47 @@ void extract_files(mtar_t* tar, char** files, int num_files)
     int err = mtar_foreach(tar, extract_foreach_cb, &args);
     if(err)
         die(E_TAR, "extraction failed: %s", mtar_strerror(err));
+}
+
+void add_files(mtar_t* tar, char** files, int num_files)
+{
+    for(int i = 0; i < num_files; ++i) {
+        int fd = open(files[i], O_RDONLY);
+        if(fd < 0)
+            die(E_FS, "adding \"%s\" failed: %s", files[i], strerror(errno));
+
+        off_t off = lseek(fd, 0, SEEK_END);
+        if(off < 0)
+            die(E_FS, "adding \"%s\" failed: %s", files[i], strerror(errno));
+
+        unsigned filesize = off;
+        lseek(fd, 0, SEEK_SET);
+
+        int err = mtar_write_file_header(tar, files[i], filesize);
+        if(err)
+            die(E_TAR, "adding \"%s\" failed: %s", files[i], mtar_strerror(err));
+
+        char iobuf[1024];
+        while(1) {
+            int rcount = read(fd, iobuf, sizeof(iobuf));
+            if(rcount < 0)
+                die(E_FS, "adding \"%s\" failed: %s", files[i], strerror(errno));
+            if(rcount == 0)
+                break;
+
+            int wcount = mtar_write_data(tar, iobuf, rcount);
+            if(wcount < 0)
+                die(E_TAR, "adding \"%s\" failed: %s", files[i], mtar_strerror(wcount));
+            if(wcount != rcount)
+                die(E_TAR, "adding \"%s\" failed: write too short %d/%d", files[i], wcount, rcount);
+        }
+
+        close(fd);
+
+        err = mtar_end_data(tar);
+        if(err)
+            die(E_TAR, "adding \"%s\" failed: %s", files[i], mtar_strerror(err));
+    }
 }
 
 int main(int argc, char* argv[])
@@ -164,8 +205,12 @@ int main(int argc, char* argv[])
     if(op == OP_LIST && argc != 0)
         die(E_ARGS, "excess arguments on command line");
 
+    const char* mode = "rb";
+    if(op == OP_CREATE)
+        mode = "wb";
+
     mtar_t tar;
-    int err = mtar_open(&tar, archive_name, "rb");
+    int err = mtar_open(&tar, archive_name, mode);
     if(err)
         die(E_TAR, "can't open archive: %s", mtar_strerror(err));
 
@@ -178,6 +223,13 @@ int main(int argc, char* argv[])
         extract_files(&tar, argv, argc);
         break;
 
+    case OP_CREATE:
+        add_files(&tar, argv, argc);
+        err = mtar_finalize(&tar);
+        if(err)
+            die(E_TAR, "failed to finalize archive: %s", mtar_strerror(err));
+        break;
+
     default:
         die(E_OTHER, "not implemented");
         break;
@@ -185,7 +237,7 @@ int main(int argc, char* argv[])
 
     err = mtar_close(&tar);
     if(err)
-        die(E_TAR, "failed to finalize archive: %s", mtar_strerror(err));
+        die(E_TAR, "failed to close archive: %s", mtar_strerror(err));
 
     return 0;
 }
