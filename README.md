@@ -178,29 +178,25 @@ included in the interest of simplicity.
 
 The main functions are:
 
-- `mtar_write_header(tar, header)` writes out a new record. The amount
-  of data that follows is dictated by `header->size` and you will have
-  to write it out before moving to the next record.
+- `mtar_write_header(tar, header)` writes out the header for a new member.
+  The amount of data that follows is dictated by `header->size` and you
+  will have to write it out before moving to the next member.
 
 - `mtar_write_data(tar, buf, count)` will write up to `count` bytes from
-  `buf` into the current record. Returns the number of bytes actually
+  `buf` to the current member's data. Returns the number of bytes actually
   written or a negative error code. If you provide too much data, a short
   count is returned.
 
-- `mtar_end_record(tar)` will end the current record. It will complain
+- `mtar_end_data(tar)` will end the current member. It will complain
   if you did not write the correct amount data provided in the header.
+  This must be called before writing the next header.
 
-- `mtar_finalize(tar)` is called after you have written all records to
+- `mtar_finalize(tar)` is called after you have written all members to
   the archive. It writes out some null records which mark the end of the
-  archive, so you cannot write any more records after calling this.
+  archive, so you cannot write any more archive members after this.
 
-It isn't necessary to call `mtar_end_record()` explicitly since it will
-be called automatically by `mtar_write_header()` and `mtar_finalize()`.
-Similarily, `mtar_finalize()` is implicitly called by `mtar_close()` if
-you don't do so yourself.
-
-Also note that `mtar_close()` can fail independently if there was a problem
-flushing buffered data to disk, so its return value should always be checked.
+Note that `mtar_close()` can fail if there was a problem flushing buffered
+data to disk, so its return value should always be checked.
 
 
 ## Error handling
