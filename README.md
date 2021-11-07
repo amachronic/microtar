@@ -170,30 +170,39 @@ data with a simple POSIX-like API.
 
 ### Writing archives
 
-If you have opened an archive for writing, your options are a bit more
-limited than with reading as you need to generate the whole archive in
-a single pass. Seeking around and rewriting previously written data is
-not allowed. Support for this wouldn't be hard to add, but it was not
-included in the interest of simplicity.
-
-The main functions are:
+Microtar has limited support for creating archives. When an archive is opened
+for writing, you can add new members using `mtar_write_header()`.
 
 - `mtar_write_header(tar, header)` writes out the header for a new member.
-  The amount of data that follows is dictated by `header->size` and you
-  will have to write it out before moving to the next member.
+  The amount of data that follows is dictated by `header->size`, though if
+  the underlying stream supports seeking and re-writing data, this size can
+  be updated later with `mtar_update_header()` or `mtar_update_file_size()`.
+
+- `mtar_update_header(tar, header)` will re-write the previously written
+  header. This may be used to change any header field. The underlying stream
+  must support seeking. On a successful return the stream will be returned
+  to the position it was at before the call.
+
+File data can be written with `mtar_write_data()`, and if the underlying stream
+supports seeking, you can seek with `mtar_seek_data()` and read back previously
+written data with `mtar_read_data()`. Note that it is not possible to truncate
+the file stream by any means.
 
 - `mtar_write_data(tar, buf, count)` will write up to `count` bytes from
   `buf` to the current member's data. Returns the number of bytes actually
-  written or a negative error code. If you provide too much data, a short
-  count is returned.
+  written or a negative error code.
 
-- `mtar_end_data(tar)` will end the current member. It will complain
-  if you did not write the correct amount data provided in the header.
-  This must be called before writing the next header.
+- `mtar_update_file_size(tar)` will update the header size to reflect the
+  actual amount of written data. This is intended to be called right before
+  `mtar_end_data()` if you are not declaring file sizes in advance.
 
-- `mtar_finalize(tar)` is called after you have written all members to
-  the archive. It writes out some null records which mark the end of the
-  archive, so you cannot write any more archive members after this.
+- `mtar_end_data(tar)` will end the current member. It will complain if you
+  did not write the correct amount data provided in the header. This must be
+  called before writing the next header.
+
+- `mtar_finalize(tar)` is called after you have written all members to the
+  archive. It writes out some null records which mark the end of the archive,
+  so you cannot write any more archive members after this.
 
 Note that `mtar_close()` can fail if there was a problem flushing buffered
 data to disk, so its return value should always be checked.

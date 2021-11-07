@@ -44,7 +44,7 @@ enum mtar_error {
     MTAR_EOVERFLOW    = -10,
     MTAR_EAPI         = -11,
     MTAR_ENAMETOOLONG = -12,
-    MTAR_ETOOSHORT    = -13,
+    MTAR_EWRONGSIZE   = -13,
     MTAR_EACCESS      = -14,
     MTAR_ELAST        = MTAR_ETOOSHORT,
 };
@@ -94,6 +94,7 @@ struct mtar {
     int state;              /* Used to simplify the API and verify API usage */
     int access;             /* Access mode */
     unsigned pos;           /* Current position in file */
+    unsigned end_pos;       /* End position of the current file */
     unsigned header_pos;    /* Position of the current header */
     mtar_header_t header;   /* Most recently parsed header */
     const mtar_ops_t* ops;  /* Stream operations */
@@ -120,9 +121,11 @@ unsigned mtar_tell_data(mtar_t* tar);
 int mtar_eof_data(mtar_t* tar);
 
 int mtar_write_header(mtar_t* tar, const mtar_header_t* h);
+int mtar_update_header(mtar_t* tar, const mtar_header_t* h);
 int mtar_write_file_header(mtar_t* tar, const char* name, unsigned size);
 int mtar_write_dir_header(mtar_t* tar, const char* name);
 int mtar_write_data(mtar_t* tar, const void* ptr, unsigned size);
+int mtar_update_file_size(mtar_t* tar);
 int mtar_end_data(mtar_t* tar);
 int mtar_finalize(mtar_t* tar);
 

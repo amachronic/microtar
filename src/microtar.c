@@ -248,6 +248,16 @@ static int header_to_raw(char* raw, const mtar_header_t* h)
     return MTAR_ESUCCESS;
 }
 
+static unsigned data_beg_pos(const mtar_t* tar)
+{
+    return tar->header_pos + HEADER_LEN;
+}
+
+static unsigned data_end_pos(const mtar_t* tar)
+{
+    return tar->end_pos;
+}
+
 static int ensure_header(mtar_t* tar)
 {
     int ret, err;
@@ -255,7 +265,12 @@ static int ensure_header(mtar_t* tar)
     if(tar->state & S_HEADER_VALID)
         return MTAR_ESUCCESS;
 
+    if(tar->pos > UINT_MAX - HEADER_LEN)
+        return MTAR_EOVERFLOW;
+
     tar->header_pos = tar->pos;
+    tar->end_pos = data_beg_pos(tar);
+
     ret = tread(tar, tar->buffer, HEADER_LEN);
     if(ret < 0)
         return ret;
@@ -266,18 +281,12 @@ static int ensure_header(mtar_t* tar)
     if(err)
         return err;
 
+    if(tar->end_pos > UINT_MAX - tar->header.size)
+        return MTAR_EOVERFLOW;
+    tar->end_pos += tar->header.size;
+
     tar->state |= S_HEADER_VALID;
     return MTAR_ESUCCESS;
-}
-
-static unsigned data_beg_pos(const mtar_t* tar)
-{
-    return tar->header_pos + HEADER_LEN;
-}
-
-static unsigned data_end_pos(const mtar_t* tar)
-{
-    return data_beg_pos(tar) + tar->header.size;
 }
 
 const char* mtar_strerror(int err)
@@ -296,7 +305,7 @@ const char* mtar_strerror(int err)
     case MTAR_EOVERFLOW:    return "overflow";
     case MTAR_EAPI:         return "API usage error";
     case MTAR_ENAMETOOLONG: return "name too long";
-    case MTAR_ETOOSHORT:    return "file too short";
+    case MTAR_EWRONGSIZE:   return "wrong amount of data written";
     case MTAR_EACCESS:      return "wrong access mode";
     default:                return "unknown error";
     }
@@ -431,8 +440,6 @@ int mtar_read_data(mtar_t* tar, void* ptr, unsigned size)
 int mtar_seek_data(mtar_t* tar, int offset, int whence)
 {
 #ifndef MICROTAR_DISABLE_API_CHECKS
-    if(tar->access != MTAR_READ)
-        return MTAR_EACCESS;
     if(!(tar->state & S_HEADER_VALID))
         return MTAR_EAPI;
 #endif
@@ -474,8 +481,6 @@ int mtar_seek_data(mtar_t* tar, int offset, int whence)
 unsigned mtar_tell_data(mtar_t* tar)
 {
 #ifndef MICROTAR_DISABLE_API_CHECKS
-    if(tar->access != MTAR_READ)
-        return MTAR_EACCESS;
     if(!(tar->state & S_HEADER_VALID))
         return MTAR_EAPI;
 #endif
@@ -485,9 +490,7 @@ unsigned mtar_tell_data(mtar_t* tar)
 
 int mtar_eof_data(mtar_t* tar)
 {
-    /* API usage errors, but just claim EOF. */
-    if(tar->access != MTAR_READ)
-        return 1;
+    /* API usage error, but just claim EOF. */
     if(!(tar->state & S_HEADER_VALID))
         return 1;
 
@@ -504,12 +507,20 @@ int mtar_write_header(mtar_t* tar, const mtar_header_t* h)
         return MTAR_EAPI;
 #endif
 
-    tar->state &= ~(S_WROTE_HEADER | S_WROTE_DATA | S_WROTE_DATA_EOF);
+    tar->state &= ~(S_HEADER_VALID | S_WROTE_HEADER |
+                    S_WROTE_DATA | S_WROTE_DATA_EOF);
+
+    /* ensure we have enough space to write the declared amount of data */
+    if(tar->pos > UINT_MAX - HEADER_LEN - round_up_512(h->size))
+        return MTAR_EOVERFLOW;
+
     tar->header_pos = tar->pos;
+    tar->end_pos = data_beg_pos(tar);
+
     if(h != &tar->header)
         tar->header = *h;
 
-    int err = header_to_raw(tar->buffer, h);
+    int err = header_to_raw(tar->buffer, &tar->header);
     if(err)
         return err;
 
@@ -519,8 +530,44 @@ int mtar_write_header(mtar_t* tar, const mtar_header_t* h)
     if(ret != HEADER_LEN)
         return MTAR_EWRITEFAIL;
 
-    tar->state |= S_WROTE_HEADER;
+    tar->state |= (S_HEADER_VALID | S_WROTE_HEADER);
     return MTAR_ESUCCESS;
+}
+
+int mtar_update_header(mtar_t* tar, const mtar_header_t* h)
+{
+#ifndef MICROTAR_DISABLE_API_CHECKS
+    if(tar->access != MTAR_WRITE)
+        return MTAR_EACCESS;
+    if(!(tar->state & S_WROTE_HEADER) ||
+       (tar->state & S_WROTE_DATA_EOF) ||
+       (tar->state & S_WROTE_FINALIZE))
+        return MTAR_EAPI;
+#endif
+
+    unsigned beg_pos = data_beg_pos(tar);
+    if(beg_pos > UINT_MAX - h->size)
+        return MTAR_EOVERFLOW;
+
+    unsigned old_pos = tar->pos;
+    int err = tseek(tar, tar->header_pos);
+    if(err)
+        return err;
+
+    if(h != &tar->header)
+        tar->header = *h;
+
+    err = header_to_raw(tar->buffer, &tar->header);
+    if(err)
+        return err;
+
+    int len = twrite(tar, tar->buffer, HEADER_LEN);
+    if(len < 0)
+        return len;
+    if(len != HEADER_LEN)
+        return MTAR_EWRITEFAIL;
+
+    return tseek(tar, old_pos);
 }
 
 int mtar_write_file_header(mtar_t* tar, const char* name, unsigned size)
@@ -570,18 +617,33 @@ int mtar_write_data(mtar_t* tar, const void* ptr, unsigned size)
         return MTAR_EAPI;
 #endif
 
-    /* don't allow writing more than was specified in the header,
-     * as this would require seeking back & updating it */
-    unsigned data_end = data_end_pos(tar);
-    if(tar->pos >= data_end)
-        return 0;
-
-    unsigned data_left = data_end - tar->pos;
-    if(size > data_left)
-        size = data_left;
-
     tar->state |= S_WROTE_DATA;
-    return twrite(tar, ptr, size);
+
+    int err = twrite(tar, ptr, size);
+    if(tar->pos > tar->end_pos)
+        tar->end_pos = tar->pos;
+
+    return err;
+}
+
+int mtar_update_file_size(mtar_t* tar)
+{
+#ifndef MICROTAR_DISABLE_API_CHECKS
+    if(tar->access != MTAR_WRITE)
+        return MTAR_EACCESS;
+    if(!(tar->state & S_WROTE_HEADER) ||
+       (tar->state & S_WROTE_DATA_EOF) ||
+       (tar->state & S_WROTE_FINALIZE))
+        return MTAR_EAPI;
+#endif
+
+    unsigned new_size = data_end_pos(tar) - data_beg_pos(tar);
+    if(new_size == tar->header.size)
+        return MTAR_ESUCCESS;
+    else {
+        tar->header.size = new_size;
+        return mtar_update_header(tar, &tar->header);
+    }
 }
 
 int mtar_end_data(mtar_t* tar)
@@ -589,16 +651,28 @@ int mtar_end_data(mtar_t* tar)
 #ifndef MICROTAR_DISABLE_API_CHECKS
     if(tar->access != MTAR_WRITE)
         return MTAR_EACCESS;
-    if((tar->state & S_WROTE_DATA_EOF) ||
+    if(!(tar->state & S_WROTE_HEADER) ||
+       (tar->state & S_WROTE_DATA_EOF) ||
        (tar->state & S_WROTE_FINALIZE))
         return MTAR_EAPI;
 #endif
 
-    /* make sure the caller wrote out the expected amount of data */
-    if(tar->pos < data_end_pos(tar))
-        return MTAR_ETOOSHORT;
+    int err;
 
-    int err = write_null_bytes(tar, round_up_512(tar->pos) - tar->pos);
+    /* ensure the caller wrote the correct amount of data */
+    unsigned expected_end = data_beg_pos(tar) + tar->header.size;
+    if(tar->end_pos != expected_end)
+        return MTAR_EWRONGSIZE;
+
+    /* ensure we're positioned at the end of the stream */
+    if(tar->pos != tar->end_pos) {
+        err = tseek(tar, tar->end_pos);
+        if(err)
+            return err;
+    }
+
+    /* write remainder of the 512-byte record */
+    err = write_null_bytes(tar, round_up_512(tar->pos) - tar->pos);
     if(err)
         return err;
 
