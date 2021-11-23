@@ -570,6 +570,14 @@ int mtar_update_header(mtar_t* tar, const mtar_header_t* h)
 
 int mtar_write_file_header(mtar_t* tar, const char* name, unsigned size)
 {
+#ifndef MICROTAR_DISABLE_API_CHECKS
+    if(tar->access != MTAR_WRITE)
+        return MTAR_EACCESS;
+    if(((tar->state & S_WROTE_DATA) && !(tar->state & S_WROTE_DATA_EOF)) ||
+       (tar->state & S_WROTE_FINALIZE))
+        return MTAR_EAPI;
+#endif
+
     size_t namelen = strlen(name);
     if(namelen > NAME_LEN)
         return MTAR_ENAMETOOLONG;
@@ -588,6 +596,14 @@ int mtar_write_file_header(mtar_t* tar, const char* name, unsigned size)
 
 int mtar_write_dir_header(mtar_t* tar, const char* name)
 {
+#ifndef MICROTAR_DISABLE_API_CHECKS
+    if(tar->access != MTAR_WRITE)
+        return MTAR_EACCESS;
+    if(((tar->state & S_WROTE_DATA) && !(tar->state & S_WROTE_DATA_EOF)) ||
+       (tar->state & S_WROTE_FINALIZE))
+        return MTAR_EAPI;
+#endif
+
     size_t namelen = strlen(name);
     if(namelen > NAME_LEN)
         return MTAR_ENAMETOOLONG;
