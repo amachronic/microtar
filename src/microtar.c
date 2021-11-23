@@ -418,8 +418,6 @@ int mtar_find(mtar_t* tar, const char* name)
 int mtar_read_data(mtar_t* tar, void* ptr, unsigned size)
 {
 #ifndef MICROTAR_DISABLE_API_CHECKS
-    if(tar->access != MTAR_READ)
-        return MTAR_EACCESS;
     if(!(tar->state & S_HEADER_VALID))
         return MTAR_EAPI;
 #endif
