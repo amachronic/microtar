@@ -332,7 +332,7 @@ int mtar_is_open(mtar_t* tar)
     return (tar->ops != NULL) ? 1 : 0;
 }
 
-const mtar_header_t* mtar_get_header(const mtar_t* tar)
+mtar_header_t* mtar_get_header(mtar_t* tar)
 {
     if(tar->state & S_HEADER_VALID)
         return &tar->header;
